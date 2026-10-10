@@ -13,6 +13,8 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include "ers/ui/MapView.h"
+
 namespace ers {
 
 namespace {
@@ -27,6 +29,30 @@ QTableWidget* makeTable(const QStringList& headers) {
     t->horizontalHeader()->setStretchLastSection(true);
     return t;
 }
+
+const char* kLegendHtml =
+    "<b>Map controls</b><br>"
+    "Wheel: zoom<br>"
+    "Drag: pan<br>"
+    "Double-click: zoom in<br>"
+    "Click a node: select it<br>"
+    "+ / - / Fit: top-left buttons<br><br>"
+    "<b>Nodes</b><br>"
+    "&#9632; Station (square)<br>"
+    "&#9670; Landmark (diamond)<br>"
+    "&#9679; Intersection (circle)<br><br>"
+    "<b>Roads</b><br>"
+    "Gray: normal traffic<br>"
+    "Yellow: heavy traffic<br>"
+    "Dark orange: severe traffic<br>"
+    "Red dashed: blocked<br>"
+    "R + number: road id<br><br>"
+    "<b>Markers</b><br>"
+    "Red ring: open incident<br>"
+    "Thick ring: Critical<br>"
+    "A / F / P + id: Ambulance,<br>"
+    "Fire truck, Police vehicle<br><br>"
+    "Hover over items for details.";
 } // namespace
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
@@ -81,6 +107,26 @@ void MainWindow::buildUi() {
     controls->addWidget(scenarioBtn_);
     root->addLayout(controls);
 
+    auto* mapView = new MapView(facade_);
+    connect(mapView, &MapView::nodeClicked, this, [this](int id) {
+        if (!facade_.city().hasNode(id)) return;
+        const CityNode& n = facade_.city().node(id);
+        statusBar()->showMessage(
+            QString("Selected node %1: %2").arg(id).arg(QString::fromStdString(n.name())), 6000);
+    });
+
+    auto* legend = new QLabel(QString::fromLatin1(kLegendHtml));
+    legend->setTextFormat(Qt::RichText);
+    legend->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    legend->setFixedWidth(230);
+    legend->setStyleSheet(
+        "QLabel{color:#222222; background:#fafafa; border:1px solid #cccccc; padding:6px;}");
+    auto* mapRow = new QWidget();
+    auto* mapLay = new QHBoxLayout(mapRow);
+    mapLay->setContentsMargins(0, 0, 0, 0);
+    mapLay->addWidget(mapView, 1);
+    mapLay->addWidget(legend);
+
     incidentTable_ = makeTable({"ID", "Type", "Priority", "Status", "Location", "Vehicles", "Unmet"});
     vehicleTable_ = makeTable({"ID", "Type", "Status", "Station", "Node", "Incident"});
 
@@ -103,6 +149,7 @@ void MainWindow::buildUi() {
     logView_->setMaximumBlockCount(5000);
 
     auto* vertical = new QSplitter(Qt::Vertical);
+    vertical->addWidget(mapRow);
     vertical->addWidget(tables);
     auto* logBox = new QWidget();
     auto* logLay = new QVBoxLayout(logBox);
@@ -110,8 +157,9 @@ void MainWindow::buildUi() {
     logLay->addWidget(new QLabel("Event log"));
     logLay->addWidget(logView_);
     vertical->addWidget(logBox);
-    vertical->setStretchFactor(0, 3);
+    vertical->setStretchFactor(0, 4);
     vertical->setStretchFactor(1, 2);
+    vertical->setStretchFactor(2, 1);
     root->addWidget(vertical, 1);
 
     setCentralWidget(central);
@@ -119,7 +167,7 @@ void MainWindow::buildUi() {
     timeLabel_ = new QLabel();
     statusBar()->addPermanentWidget(timeLabel_);
     statusBar()->showMessage("Ready. Simulated estimates only.");
-    resize(1100, 720);
+    resize(1200, 880);
 }
 
 void MainWindow::refreshTables() {
