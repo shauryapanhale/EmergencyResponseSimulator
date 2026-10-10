@@ -1,15 +1,11 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
-#include <unordered_map>
 #include "ers/common/Strings.h"
 #include "ers/common/Version.h"
 #include "ers/models/CityMap.h"
-#include "ers/models/EmergencyFactory.h"
 #include "ers/models/VehicleFactory.h"
-#include "ers/services/DispatchEngine.h"
-#include "ers/services/PendingQueue.h"
-#include "ers/services/RoutingEngine.h"
+#include "ers/services/SimulationEngine.h"
 
 using namespace ers;
 
@@ -33,54 +29,38 @@ static CityMap buildCity() {
 
 int main() {
     std::cout << ers::projectName() << "\n" << ers::disclaimer() << "\n\n";
-    std::cout << std::fixed << std::setprecision(1);
+    std::cout << std::fixed << std::setprecision(2);
 
     CityMap city = buildCity();
-    RoutingEngine routing(city);
-    DispatchEngine dispatcher(routing);
-
     std::vector<std::unique_ptr<Vehicle>> fleet;
     fleet.push_back(createVehicle(VehicleType::Ambulance, 1, 0, 0, 40.0));
     fleet.push_back(createVehicle(VehicleType::Ambulance, 2, 0, 5, 40.0));
     fleet.push_back(createVehicle(VehicleType::FireTruck, 3, 1, 4, 35.0));
     fleet.push_back(createVehicle(VehicleType::Police, 4, 2, 5, 50.0));
 
-    std::unordered_map<EmergencyId, std::unique_ptr<Emergency>> incidents;
-    PendingQueue queue;
-    auto report = [&](EmergencyType t, EmergencyId id, NodeId node, Priority p, double time,
-                      const std::string& desc) {
-        auto e = createEmergency(t, id, node, p, time, desc);
-        queue.push(*e);
-        std::cout << "Reported #" << id << " " << toString(t) << " (" << toString(p) << ") at "
-                  << city.node(node).name() << "\n";
-        incidents[id] = std::move(e);
-    };
+    SimulationConfig cfg;
+    cfg.tickMinutes = 1.0;
+    cfg.autoResolveMinutes = 3.0;
+    SimulationEngine sim(city, std::move(fleet), cfg);
 
-    report(EmergencyType::Medical, 1, 2, Priority::High, 0.0, "collapsed pedestrian");
-    report(EmergencyType::Fire, 2, 3, Priority::Critical, 1.0, "mall fire");
-    report(EmergencyType::Crime, 3, 3, Priority::Low, 2.0, "shoplifting");
-    report(EmergencyType::Medical, 4, 1, Priority::Medium, 3.0, "minor injury");
+    sim.start();
+    sim.reportIncident(EmergencyType::Medical, 2, Priority::High, "collapsed pedestrian");
+    sim.reportIncident(EmergencyType::Fire, 3, Priority::Critical, "mall fire");
+    sim.reportIncident(EmergencyType::Crime, 3, Priority::Low, "shoplifting");
+    sim.reportIncident(EmergencyType::Medical, 1, Priority::Medium, "minor injury");
+    sim.runTicks(40);
 
-    std::cout << "\n--- Dispatching in priority order ---\n";
-    while (auto next = queue.popNext()) {
-        Emergency& e = *incidents.at(*next);
-        std::cout << "\nIncident #" << e.id() << " " << toString(e.type()) << " ["
-                  << toString(e.priority()) << "]\n";
-        DispatchResult r = dispatcher.dispatch(e, fleet, e.createdAt());
-        std::cout << r.explanation;
-        for (const auto& rec : r.records) {
-            std::cout << "  Route: ";
-            const auto& nodes = rec.route().nodes();
-            for (std::size_t i = 0; i < nodes.size(); ++i)
-                std::cout << (i ? " -> " : "") << city.node(nodes[i]).name();
-            std::cout << "\n  ETA: " << rec.etaMinutes() << " min (simulated estimate)\n";
-        }
-    }
+    std::cout << "--- Event log ---\n";
+    for (const auto& e : sim.log().entries()) std::cout << EventLog::format(e) << "\n";
 
-    std::cout << "\n--- Final state ---\n";
-    for (const auto& v : fleet)
-        std::cout << toString(v->type()) << " #" << v->id() << ": " << toString(v->status()) << "\n";
-    for (EmergencyId id = 1; id <= 4; ++id)
-        std::cout << "Incident #" << id << ": " << toString(incidents.at(id)->status()) << "\n";
+    StatsSnapshot s = sim.stats();
+    std::cout << "\n--- Statistics at t=" << sim.time() << " min ---\n";
+    std::cout << "Incidents created/resolved/active/pending: " << s.created << "/" << s.resolved << "/"
+              << s.active << "/" << s.pending << "\n";
+    std::cout << "Response time (min): avg " << s.avgResponse << ", min " << s.minResponse
+              << ", max " << s.maxResponse << " over " << s.responseCount << " arrivals\n";
+    std::cout << "Average waiting before first dispatch: " << s.avgWaiting << " min\n";
+    for (const auto& kv : s.utilization)
+        std::cout << "Vehicle #" << kv.first << " utilization: " << kv.second * 100.0 << "%\n";
     return 0;
 }
