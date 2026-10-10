@@ -30,5 +30,8 @@ target_link_libraries(ers_core PUBLIC sqlite3_lib)
 add_executable(ers_console src/main_console.cpp)
 target_link_libraries(ers_console PRIVATE ers_core)
 
+add_executable(ers_persistence_demo src/main_persistence_demo.cpp)
+target_link_libraries(ers_persistence_demo PRIVATE ers_core)
+
 enable_testing()
 add_subdirectory(tests)
