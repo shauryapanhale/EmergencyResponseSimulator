@@ -3,6 +3,7 @@
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QInputDialog>
 #include <QLabel>
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -13,6 +14,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include "ers/ui/Dialogs.h"
 #include "ers/ui/MapView.h"
 
 namespace ers {
@@ -24,6 +26,7 @@ QTableWidget* makeTable(const QStringList& headers) {
     t->setHorizontalHeaderLabels(headers);
     t->setEditTriggers(QAbstractItemView::NoEditTriggers);
     t->setSelectionBehavior(QAbstractItemView::SelectRows);
+    t->setSelectionMode(QAbstractItemView::SingleSelection);
     t->setAlternatingRowColors(true);
     t->verticalHeader()->setVisible(false);
     t->horizontalHeader()->setStretchLastSection(true);
@@ -36,7 +39,7 @@ const char* kLegendHtml =
     "Drag: pan<br>"
     "Double-click: zoom in<br>"
     "Click a node: select it<br>"
-    "+ / - / Fit: top-left buttons<br><br>"
+    "(Report incident uses it)<br><br>"
     "<b>Nodes</b><br>"
     "&#9632; Station (square)<br>"
     "&#9670; Landmark (diamond)<br>"
@@ -53,6 +56,8 @@ const char* kLegendHtml =
     "A / F / P + id: Ambulance,<br>"
     "Fire truck, Police vehicle<br><br>"
     "Hover over items for details.";
+
+bool isOpen(const QString& status) { return status != "Resolved" && status != "Unserved"; }
 } // namespace
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
@@ -72,6 +77,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(stepBtn_, &QPushButton::clicked, &facade_, &ApplicationFacade::stepOnce);
     connect(resetBtn_, &QPushButton::clicked, &facade_, &ApplicationFacade::reset);
     connect(scenarioBtn_, &QPushButton::clicked, this, &MainWindow::runSelectedScenario);
+    connect(reportBtn_, &QPushButton::clicked, this, &MainWindow::onReportIncident);
+    connect(roadBtn_, &QPushButton::clicked, this, &MainWindow::onRoadDialog);
+    connect(statsBtn_, &QPushButton::clicked, this, &MainWindow::onShowStats);
+    connect(resolveBtn_, &QPushButton::clicked, this, &MainWindow::onResolve);
+    connect(priorityBtn_, &QPushButton::clicked, this, &MainWindow::onChangePriority);
+    connect(incidentTable_, &QTableWidget::itemSelectionChanged, this, &MainWindow::updateDetails);
 
     onRunningChanged(false);
     onTimeChanged(facade_.time());
@@ -93,11 +104,18 @@ void MainWindow::buildUi() {
     resumeBtn_ = new QPushButton("Resume");
     stepBtn_ = new QPushButton("Step");
     resetBtn_ = new QPushButton("Reset");
+    reportBtn_ = new QPushButton("Report incident...");
+    roadBtn_ = new QPushButton("Traffic / roads...");
+    statsBtn_ = new QPushButton("Statistics...");
     controls->addWidget(startBtn_);
     controls->addWidget(pauseBtn_);
     controls->addWidget(resumeBtn_);
     controls->addWidget(stepBtn_);
     controls->addWidget(resetBtn_);
+    controls->addSpacing(16);
+    controls->addWidget(reportBtn_);
+    controls->addWidget(roadBtn_);
+    controls->addWidget(statsBtn_);
     controls->addStretch();
     controls->addWidget(new QLabel("Scenario:"));
     scenarioBox_ = new QComboBox();
@@ -107,12 +125,15 @@ void MainWindow::buildUi() {
     controls->addWidget(scenarioBtn_);
     root->addLayout(controls);
 
-    auto* mapView = new MapView(facade_);
-    connect(mapView, &MapView::nodeClicked, this, [this](int id) {
+    mapView_ = new MapView(facade_);
+    connect(mapView_, &MapView::nodeClicked, this, [this](int id) {
         if (!facade_.city().hasNode(id)) return;
         const CityNode& n = facade_.city().node(id);
         statusBar()->showMessage(
-            QString("Selected node %1: %2").arg(id).arg(QString::fromStdString(n.name())), 6000);
+            QString("Selected node %1: %2 (Report incident will use it)")
+                .arg(id)
+                .arg(QString::fromStdString(n.name())),
+            6000);
     });
 
     auto* legend = new QLabel(QString::fromLatin1(kLegendHtml));
@@ -124,11 +145,14 @@ void MainWindow::buildUi() {
     auto* mapRow = new QWidget();
     auto* mapLay = new QHBoxLayout(mapRow);
     mapLay->setContentsMargins(0, 0, 0, 0);
-    mapLay->addWidget(mapView, 1);
+    mapLay->addWidget(mapView_, 1);
     mapLay->addWidget(legend);
 
     incidentTable_ = makeTable({"ID", "Type", "Priority", "Status", "Location", "Vehicles", "Unmet"});
     vehicleTable_ = makeTable({"ID", "Type", "Status", "Station", "Node", "Incident"});
+
+    resolveBtn_ = new QPushButton("Resolve selected");
+    priorityBtn_ = new QPushButton("Change priority...");
 
     auto* tables = new QSplitter(Qt::Horizontal);
     auto* incBox = new QWidget();
@@ -136,13 +160,32 @@ void MainWindow::buildUi() {
     incLay->setContentsMargins(0, 0, 0, 0);
     incLay->addWidget(new QLabel("Incidents"));
     incLay->addWidget(incidentTable_);
+    auto* actions = new QHBoxLayout();
+    actions->addWidget(resolveBtn_);
+    actions->addWidget(priorityBtn_);
+    actions->addStretch();
+    incLay->addLayout(actions);
+
     auto* vehBox = new QWidget();
     auto* vehLay = new QVBoxLayout(vehBox);
     vehLay->setContentsMargins(0, 0, 0, 0);
     vehLay->addWidget(new QLabel("Vehicles"));
     vehLay->addWidget(vehicleTable_);
+
+    detailsView_ = new QPlainTextEdit();
+    detailsView_->setReadOnly(true);
+    auto* detBox = new QWidget();
+    auto* detLay = new QVBoxLayout(detBox);
+    detLay->setContentsMargins(0, 0, 0, 0);
+    detLay->addWidget(new QLabel("Dispatch details"));
+    detLay->addWidget(detailsView_);
+
     tables->addWidget(incBox);
     tables->addWidget(vehBox);
+    tables->addWidget(detBox);
+    tables->setStretchFactor(0, 3);
+    tables->setStretchFactor(1, 2);
+    tables->setStretchFactor(2, 2);
 
     logView_ = new QPlainTextEdit();
     logView_->setReadOnly(true);
@@ -167,7 +210,14 @@ void MainWindow::buildUi() {
     timeLabel_ = new QLabel();
     statusBar()->addPermanentWidget(timeLabel_);
     statusBar()->showMessage("Ready. Simulated estimates only.");
-    resize(1200, 880);
+    resize(1300, 900);
+}
+
+int MainWindow::selectedIncidentId() const {
+    const auto items = incidentTable_->selectedItems();
+    if (items.isEmpty()) return -1;
+    const QTableWidgetItem* idItem = incidentTable_->item(items.first()->row(), 0);
+    return idItem ? idItem->text().toInt() : -1;
 }
 
 void MainWindow::refreshTables() {
@@ -195,6 +245,34 @@ void MainWindow::refreshTables() {
             vehicleTable_->setItem(row, c, new QTableWidgetItem(cells[c]));
         ++row;
     }
+    updateDetails();
+}
+
+void MainWindow::updateDetails() {
+    const int id = selectedIncidentId();
+    resolveBtn_->setEnabled(id >= 0);
+    priorityBtn_->setEnabled(id >= 0);
+    if (id < 0) {
+        detailsView_->setPlainText("Select an incident to see its dispatch details.");
+        return;
+    }
+    for (const auto& i : facade_.incidents()) {
+        if (i.id != id) continue;
+        QStringList vehicles;
+        for (int v : i.vehicleIds) vehicles << QString::number(v);
+        QString text;
+        text += QString("Incident #%1\n").arg(i.id);
+        text += QString("Type: %1\nPriority: %2\nStatus: %3\n").arg(i.type, i.priority, i.status);
+        text += QString("Location: %1 (node %2)\n").arg(i.nodeName).arg(i.nodeId);
+        text += QString("Created at: %1 min\n").arg(i.createdAt, 0, 'f', 1);
+        text += QString("Description: %1\n").arg(i.description);
+        text += QString("Vehicles: %1\n").arg(vehicles.isEmpty() ? QString("none") : vehicles.join(", "));
+        text += QString("Unmet resources: %1\n\n").arg(i.unmet.isEmpty() ? QString("none") : i.unmet);
+        text += "Dispatch reasoning:\n" + facade_.explanationFor(id);
+        detailsView_->setPlainText(text);
+        return;
+    }
+    detailsView_->setPlainText("Incident not found.");
 }
 
 void MainWindow::onTimeChanged(double minutes) {
@@ -226,6 +304,55 @@ void MainWindow::runSelectedScenario() {
     const QString name = scenarioBox_->currentText();
     if (facade_.runScenario(name))
         statusBar()->showMessage("Scenario finished: " + name, 5000);
+}
+
+void MainWindow::onReportIncident() {
+    ReportIncidentDialog dlg(facade_.city(), mapView_->selectedNode(), this);
+    if (dlg.exec() != QDialog::Accepted) return;
+    const int id = facade_.reportIncident(dlg.type(), dlg.nodeId(), dlg.priority(), dlg.description());
+    if (id >= 0) statusBar()->showMessage(QString("Incident %1 reported").arg(id), 5000);
+}
+
+void MainWindow::onRoadDialog() {
+    RoadDialog dlg(facade_.city(), this);
+    if (dlg.exec() != QDialog::Accepted) return;
+    if (!facade_.setTraffic(dlg.roadId(), dlg.factor())) return;
+    if (!facade_.setBlocked(dlg.roadId(), dlg.blocked())) return;
+    statusBar()->showMessage(QString("Road %1 updated: traffic x%2%3")
+                                 .arg(dlg.roadId())
+                                 .arg(dlg.factor(), 0, 'f', 1)
+                                 .arg(dlg.blocked() ? ", blocked" : ""),
+                             5000);
+}
+
+void MainWindow::onResolve() {
+    const int id = selectedIncidentId();
+    if (id < 0) return;
+    if (facade_.resolveIncident(id))
+        statusBar()->showMessage(QString("Incident %1 resolved").arg(id), 5000);
+}
+
+void MainWindow::onChangePriority() {
+    const int id = selectedIncidentId();
+    if (id < 0) return;
+    const QStringList levels = {"Critical", "High", "Medium", "Low"};
+    bool ok = false;
+    const QString choice = QInputDialog::getItem(this, "Change priority",
+                                                 QString("New priority for incident %1:").arg(id),
+                                                 levels, 1, false, &ok);
+    if (!ok) return;
+    const int index = levels.indexOf(choice);
+    if (index < 0) return;
+    if (facade_.changePriority(id, static_cast<Priority>(index)))
+        statusBar()->showMessage(QString("Incident %1 priority set to %2").arg(id).arg(choice), 5000);
+}
+
+void MainWindow::onShowStats() {
+    int unmetNow = 0;
+    for (const auto& i : facade_.incidents())
+        if (isOpen(i.status) && !i.unmet.isEmpty()) ++unmetNow;
+    StatsDialog dlg(facade_.stats(), unmetNow, this);
+    dlg.exec();
 }
 
 } // namespace ers

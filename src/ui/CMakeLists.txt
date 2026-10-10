@@ -2,9 +2,11 @@ set(CMAKE_AUTOMOC ON)
 
 add_library(ers_qt STATIC
     ApplicationFacade.cpp
+    Dialogs.cpp
     MainWindow.cpp
     MapView.cpp
     ${CMAKE_SOURCE_DIR}/include/ers/ui/ApplicationFacade.h
+    ${CMAKE_SOURCE_DIR}/include/ers/ui/Dialogs.h
     ${CMAKE_SOURCE_DIR}/include/ers/ui/MainWindow.h
     ${CMAKE_SOURCE_DIR}/include/ers/ui/MapView.h
 )
