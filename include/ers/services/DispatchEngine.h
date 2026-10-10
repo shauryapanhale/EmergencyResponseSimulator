@@ -28,9 +28,17 @@ public:
     DispatchResult dispatch(Emergency& incident, std::vector<std::unique_ptr<Vehicle>>& fleet,
                             double now);
 
+    // Retries only the given (previously unmet) resource types for an incident that is
+    // already Dispatched or OnScene. The incident status is not changed.
+    DispatchResult supplement(Emergency& incident, std::vector<std::unique_ptr<Vehicle>>& fleet,
+                              double now, const std::vector<VehicleType>& types);
+
     int dispatchesMade() const { return nextDispatchId_ - 1; }
 
 private:
+    void allocate(Emergency& incident, std::vector<std::unique_ptr<Vehicle>>& fleet, double now,
+                  const std::vector<VehicleType>& wanted, DispatchResult& result);
+
     const RoutingEngine& routing_;
     int nextDispatchId_ = 1;
 };

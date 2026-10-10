@@ -58,6 +58,8 @@ public:
     const Emergency& incident(EmergencyId id) const;
     std::vector<EmergencyId> incidentIds() const;
     std::vector<EmergencyId> pendingIncidents() const { return queue_.snapshot(); }
+    // Resource types still missing for a partially served incident (retried every tick).
+    std::vector<VehicleType> unmetResources(EmergencyId id) const;
     const std::vector<std::unique_ptr<Vehicle>>& fleet() const { return fleet_; }
     const Vehicle& vehicle(VehicleId id) const;
     std::vector<DispatchRecord> dispatchRecords() const;
@@ -103,6 +105,7 @@ private:
     StatisticsService stats_;
     EventLog log_;
     std::map<EmergencyId, std::string> explanations_;
+    std::map<EmergencyId, std::vector<VehicleType>> unmet_;
     std::unordered_set<EmergencyId> loggedPending_;
     double now_ = 0.0;
     bool running_ = false;

@@ -60,6 +60,12 @@ std::vector<EmergencyId> SimulationEngine::incidentIds() const {
     return ids;
 }
 
+std::vector<VehicleType> SimulationEngine::unmetResources(EmergencyId id) const {
+    auto it = unmet_.find(id);
+    if (it == unmet_.end()) return {};
+    return it->second;
+}
+
 Vehicle& SimulationEngine::vehicleRef(VehicleId id) {
     auto it = vehicleIndex_.find(id);
     if (it == vehicleIndex_.end()) throw ValidationException("Unknown vehicle id");
@@ -117,17 +123,52 @@ void SimulationEngine::setBlocked(RoadId road, bool blocked) {
     log_.append(now_, "Road", road, blocked ? "Blocked" : "Unblocked");
 }
 
+// Handles never-dispatched incidents and unmet resource retries together, highest priority first.
 void SimulationEngine::processPending() {
-    for (EmergencyId id : queue_.snapshot()) {
-        Emergency& e = *incidents_.at(id);
-        DispatchResult r = dispatcher_.dispatch(e, fleet_, now_);
-        explanations_[id] = r.explanation;
-        if (!r.anyAllocated()) {
-            if (loggedPending_.insert(id).second)
-                log_.append(now_, "Incident", id, "Pending", oneLine(r.explanation));
+    struct Work {
+        EmergencyId id;
+        bool supplement;
+    };
+    std::vector<Work> work;
+    for (EmergencyId id : queue_.snapshot()) work.push_back(Work{id, false});
+    for (const auto& kv : unmet_) work.push_back(Work{kv.first, true});
+
+    std::stable_sort(work.begin(), work.end(), [this](const Work& a, const Work& b) {
+        const Emergency& x = *incidents_.at(a.id);
+        const Emergency& y = *incidents_.at(b.id);
+        if (x.priority() != y.priority())
+            return static_cast<int>(x.priority()) < static_cast<int>(y.priority());
+        if (x.createdAt() != y.createdAt()) return x.createdAt() < y.createdAt();
+        return x.id() < y.id();
+    });
+
+    for (const Work& w : work) {
+        Emergency& e = *incidents_.at(w.id);
+
+        if (!w.supplement) {
+            DispatchResult r = dispatcher_.dispatch(e, fleet_, now_);
+            explanations_[w.id] = r.explanation;
+            if (!r.anyAllocated()) {
+                if (loggedPending_.insert(w.id).second)
+                    log_.append(now_, "Incident", w.id, "Pending", oneLine(r.explanation));
+                continue;
+            }
+            queue_.remove(w.id);
+            registerDispatch(e, r);
             continue;
         }
-        queue_.remove(id);
+
+        if (e.status() == EmergencyStatus::Resolved || e.status() == EmergencyStatus::Unserved) {
+            log_.append(now_, "Incident", w.id, "UnmetDropped",
+                        "Incident closed with unmet resource types");
+            unmet_.erase(w.id);
+            continue;
+        }
+
+        const std::vector<VehicleType> types = unmet_.at(w.id);
+        DispatchResult r = dispatcher_.supplement(e, fleet_, now_, types);
+        if (!r.anyAllocated()) continue;
+        explanations_[w.id] += r.explanation;
         registerDispatch(e, r);
     }
 }
@@ -142,7 +183,10 @@ void SimulationEngine::registerDispatch(Emergency& e, const DispatchResult& resu
         responses_.emplace_back(rec);
         activeByVehicle_[rec.vehicleId()] = responses_.size() - 1;
     }
-    if (!result.unmet.empty()) {
+    if (result.unmet.empty()) {
+        unmet_.erase(e.id());
+    } else {
+        unmet_[e.id()] = result.unmet;
         std::string missing;
         for (VehicleType t : result.unmet) missing += (missing.empty() ? "" : ", ") + toString(t);
         log_.append(now_, "Incident", e.id(), "PartialAllocation", "Unmet: " + missing);

@@ -14,17 +14,14 @@ struct Candidate {
 };
 }
 
-DispatchResult DispatchEngine::dispatch(Emergency& incident,
-                                        std::vector<std::unique_ptr<Vehicle>>& fleet, double now) {
-    if (incident.status() != EmergencyStatus::Pending)
-        throw InvalidTransitionException("Only a pending incident can be dispatched");
-
-    DispatchResult result;
+void DispatchEngine::allocate(Emergency& incident, std::vector<std::unique_ptr<Vehicle>>& fleet,
+                              double now, const std::vector<VehicleType>& wanted,
+                              DispatchResult& result) {
     std::ostringstream explain;
     explain << std::fixed << std::setprecision(1);
 
     std::vector<VehicleType> types;
-    for (VehicleType t : incident.requiredResources())
+    for (VehicleType t : wanted)
         if (std::find(types.begin(), types.end(), t) == types.end()) types.push_back(t);
 
     for (VehicleType t : types) {
@@ -76,10 +73,32 @@ DispatchResult DispatchEngine::dispatch(Emergency& incident,
         explain << reason.str() << "\n";
     }
 
-    if (result.anyAllocated()) incident.markDispatched();
-    else explain << "Incident " << incident.id() << " stays Pending / Awaiting Resource\n";
+    result.explanation += explain.str();
+}
 
-    result.explanation = explain.str();
+DispatchResult DispatchEngine::dispatch(Emergency& incident,
+                                        std::vector<std::unique_ptr<Vehicle>>& fleet, double now) {
+    if (incident.status() != EmergencyStatus::Pending)
+        throw InvalidTransitionException("Only a pending incident can be dispatched");
+
+    DispatchResult result;
+    allocate(incident, fleet, now, incident.requiredResources(), result);
+
+    if (result.anyAllocated()) incident.markDispatched();
+    else result.explanation += "Incident " + std::to_string(incident.id()) +
+                               " stays Pending / Awaiting Resource\n";
+    return result;
+}
+
+DispatchResult DispatchEngine::supplement(Emergency& incident,
+                                          std::vector<std::unique_ptr<Vehicle>>& fleet, double now,
+                                          const std::vector<VehicleType>& types) {
+    if (incident.status() != EmergencyStatus::Dispatched &&
+        incident.status() != EmergencyStatus::OnScene)
+        throw InvalidTransitionException("Only a dispatched or on-scene incident can be supplemented");
+
+    DispatchResult result;
+    allocate(incident, fleet, now, types, result);
     return result;
 }
 
