@@ -3,16 +3,29 @@
 #include "ers/repositories/DatabaseRepository.h"
 #include "ers/repositories/RunRepository.h"
 #include "ers/repositories/SampleCity.h"
+#include "ers/services/Scenario.h"
 #include "ers/services/SimulationEngine.h"
 
 using namespace ers;
 
+// Usage: ers_persistence_demo [dbPath] [scenarioName | list]
 int main(int argc, char** argv) {
     const std::string path = argc > 1 ? argv[1] : "ers_demo.db";
+    const std::string scenarioName = argc > 2 ? argv[2] : "normal-traffic";
+
     std::cout << "Emergency Response Simulator - persistence demo\n"
               << "Educational simulation only - not for real emergency use.\n\n";
 
+    if (scenarioName == "list") {
+        for (const Scenario& s : sampleScenarios()) {
+            std::cout << s.name << " (" << s.durationMinutes << " min): " << s.description << "\n";
+        }
+        return 0;
+    }
+
     try {
+        const Scenario& scenario = findScenario(scenarioName);
+
         Database db(path);
         bool seeded = seedSampleCity(db);
         std::cout << "Database: " << path << (seeded ? " (seeded sample city)\n" : " (existing city loaded)\n");
@@ -23,19 +36,15 @@ int main(int argc, char** argv) {
         std::cout << "Loaded " << city.map.nodes().size() << " nodes, " << city.map.roads().size()
                   << " roads, " << city.stations.size() << " stations, " << fleet.size()
                   << " vehicles\n";
+        std::cout << "Scenario: " << scenario.name << " - " << scenario.description << "\n";
 
         SimulationConfig cfg;
         cfg.autoResolveMinutes = 3.0;
         SimulationEngine sim(city.map, std::move(fleet), cfg);
-        sim.setBlocked(4, true);  // City Hospital - Railway Station closed
-        sim.reportIncident(EmergencyType::Medical, 7, Priority::High, "fall in Old Town");
-        sim.reportIncident(EmergencyType::Fire, 9, Priority::Critical, "fire at Tech Park");
-        sim.reportIncident(EmergencyType::Crime, 10, Priority::Medium, "theft at College Campus");
-        sim.reportIncident(EmergencyType::RoadAccident, 8, Priority::Critical, "collision at Riverside");
-        sim.runTicks(80);
+        runScenario(sim, scenario);
 
         RunRepository runs(db);
-        long long runId = runs.saveRun(sim, "persistence-demo");
+        long long runId = runs.saveRun(sim, scenario.name);
         std::cout << "\nSaved run " << runId << " at sim time " << sim.time() << " min\n\n";
 
         for (const RunInfo& r : runs.listRuns()) {
