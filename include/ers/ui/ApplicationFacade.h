@@ -8,6 +8,7 @@
 #include <QTimer>
 #include "ers/models/CityMap.h"
 #include "ers/repositories/DatabaseRepository.h"
+#include "ers/services/Scenario.h"
 #include "ers/services/SimulationEngine.h"
 
 namespace ers {
@@ -81,7 +82,11 @@ public:
     void setDatabasePath(const QString& path);
     QString databasePath() const { return dbPath_; }
     QString currentScenarioName() const { return scenarioName_; }
-        void setTickIntervalMs(int ms);
+        // Step-by-step playback: loads the scenario at minute 0; Start or stepOnce() then advance
+    // it, applying events as simulation time reaches them. Emits scenarioFinished at the end.
+    bool playScenario(const QString& name);
+    bool isPlayingScenario() const { return player_ != nullptr; }
+    void setTickIntervalMs(int ms);
     void setAutoResolveMinutes(double minutes);  // < 0 = manual; resets the simulation
 
     // Read-only state
@@ -117,9 +122,11 @@ private:
     bool guarded(F&& action);
     void createSimulation();
     void notify();
+    void finishPlayback();
 
     CityData city_;                              // declared before sim_ (engine references it)
     std::unique_ptr<SimulationEngine> sim_;
+    std::unique_ptr<ScenarioPlayer> player_;      // declared after sim_: destroyed first
     SimulationConfig cfg_;
     QTimer timer_;
     bool running_ = false;

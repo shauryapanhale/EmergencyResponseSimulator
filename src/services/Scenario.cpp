@@ -123,4 +123,46 @@ void runScenario(SimulationEngine& sim, const Scenario& scenario) {
     }
 }
 
+ScenarioPlayer::ScenarioPlayer(SimulationEngine& sim, const Scenario& scenario)
+    : sim_(sim),
+      scenario_(scenario),
+      incidentDone_(scenario.incidents.size(), false),
+      trafficDone_(scenario.trafficChanges.size(), false),
+      blockDone_(scenario.roadBlocks.size(), false) {}
+
+bool ScenarioPlayer::finished() const {
+    return sim_.time() >= scenario_.durationMinutes - 1e-9;
+}
+
+void ScenarioPlayer::applyDueEvents() {
+    const double eps = 1e-9;
+    for (std::size_t i = 0; i < scenario_.trafficChanges.size(); ++i) {
+        const auto& e = scenario_.trafficChanges[i];
+        if (!trafficDone_[i] && e.atMinute <= sim_.time() + eps) {
+            sim_.setTraffic(e.road, e.factor);
+            trafficDone_[i] = true;
+        }
+    }
+    for (std::size_t i = 0; i < scenario_.roadBlocks.size(); ++i) {
+        const auto& e = scenario_.roadBlocks[i];
+        if (!blockDone_[i] && e.atMinute <= sim_.time() + eps) {
+            sim_.setBlocked(e.road, e.blocked);
+            blockDone_[i] = true;
+        }
+    }
+    for (std::size_t i = 0; i < scenario_.incidents.size(); ++i) {
+        const auto& e = scenario_.incidents[i];
+        if (!incidentDone_[i] && e.atMinute <= sim_.time() + eps) {
+            sim_.reportIncident(e.type, e.node, e.priority, e.description);
+            incidentDone_[i] = true;
+        }
+    }
+}
+
+void ScenarioPlayer::step() {
+    if (finished()) return;
+    applyDueEvents();
+    sim_.step();
+}
+
 } // namespace ers

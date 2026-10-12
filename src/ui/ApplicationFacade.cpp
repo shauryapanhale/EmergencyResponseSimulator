@@ -60,6 +60,7 @@ bool ApplicationFacade::guarded(F&& action) {
 
 void ApplicationFacade::createSimulation() {
     timer_.stop();
+    player_.reset();
     sim_.reset();                 // engine first: it references city_.map
     city_ = buildSampleCity();    // fresh city: no leftover traffic or closures
     sim_ = std::make_unique<SimulationEngine>(city_.map, buildSampleFleet(), cfg_);
@@ -167,7 +168,17 @@ void ApplicationFacade::pause() {
 }
 
 void ApplicationFacade::stepOnce() {
-    if (guarded([&] { sim_->step(); })) notify();
+    bool done = false;
+    const bool ok = guarded([&] {
+        if (player_) {
+            if (!player_->finished()) player_->step();
+            done = player_->finished();
+        } else {
+            sim_->step();
+        }
+    });
+    if (ok) notify();
+    if (done) finishPlayback();
 }
 
 void ApplicationFacade::reset() {
@@ -299,6 +310,34 @@ QStringList ApplicationFacade::savedRunLog(long long runId) {
         for (const auto& e : repo.loadLog(runId)) lines << q(EventLog::format(e));
     });
     return lines;
+}
+
+bool ApplicationFacade::playScenario(const QString& name) {
+    const bool wasRunning = running_;
+    const bool ok = guarded([&] {
+        const Scenario& sc = findScenario(name.toStdString());
+        createSimulation();
+        player_ = std::make_unique<ScenarioPlayer>(*sim_, sc);
+        scenarioName_ = name;
+        player_->applyDueEvents();  // events due at minute 0 appear immediately
+    });
+    if (!ok) return false;
+    if (wasRunning) emit runningChanged(false);
+    emit simulationReset();
+    notify();
+    return true;
+}
+
+void ApplicationFacade::finishPlayback() {
+    const QString name = scenarioName_;
+    player_.reset();
+    if (running_) {
+        timer_.stop();
+        sim_->pause();
+        running_ = false;
+        emit runningChanged(false);
+    }
+    emit scenarioFinished(name);
 }
 
 } // namespace ers

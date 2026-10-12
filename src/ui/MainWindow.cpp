@@ -4,9 +4,12 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QInputDialog>
+#include <QKeySequence>
 #include <QLabel>
+#include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QShortcut>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QStringList>
@@ -75,8 +78,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(pauseBtn_, &QPushButton::clicked, &facade_, &ApplicationFacade::pause);
     connect(resumeBtn_, &QPushButton::clicked, &facade_, &ApplicationFacade::resume);
     connect(stepBtn_, &QPushButton::clicked, &facade_, &ApplicationFacade::stepOnce);
-    connect(resetBtn_, &QPushButton::clicked, &facade_, &ApplicationFacade::reset);
+    connect(resetBtn_, &QPushButton::clicked, this, &MainWindow::onResetClicked);
     connect(scenarioBtn_, &QPushButton::clicked, this, &MainWindow::runSelectedScenario);
+    connect(playBtn_, &QPushButton::clicked, this, &MainWindow::onPlayScenario);
     connect(reportBtn_, &QPushButton::clicked, this, &MainWindow::onReportIncident);
     connect(roadBtn_, &QPushButton::clicked, this, &MainWindow::onRoadDialog);
     connect(statsBtn_, &QPushButton::clicked, this, &MainWindow::onShowStats);
@@ -85,6 +89,25 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(resolveBtn_, &QPushButton::clicked, this, &MainWindow::onResolve);
     connect(priorityBtn_, &QPushButton::clicked, this, &MainWindow::onChangePriority);
     connect(incidentTable_, &QTableWidget::itemSelectionChanged, this, &MainWindow::updateDetails);
+
+    connect(speedBox_, &QComboBox::currentIndexChanged, this, [this](int index) {
+        static const int intervalsMs[] = {500, 250, 100, 50};
+        if (index >= 0 && index < 4) facade_.setTickIntervalMs(intervalsMs[index]);
+    });
+    connect(&facade_, &ApplicationFacade::scenarioFinished, this, [this](const QString& name) {
+        statusBar()->showMessage("Scenario finished: " + name + ". Use Save run to keep it.", 8000);
+    });
+
+    auto bindKey = [this](const QKeySequence& key, QPushButton* button, const QString& tip) {
+        auto* shortcut = new QShortcut(key, this);
+        connect(shortcut, &QShortcut::activated, button, &QPushButton::click);
+        button->setToolTip(tip + " (" + key.toString() + ")");
+    };
+    bindKey(QKeySequence(Qt::Key_F5), startBtn_, "Start");
+    bindKey(QKeySequence(Qt::Key_F6), pauseBtn_, "Pause");
+    bindKey(QKeySequence(Qt::Key_F7), stepBtn_, "Step one tick");
+    bindKey(QKeySequence("Ctrl+R"), reportBtn_, "Report incident");
+    bindKey(QKeySequence("Ctrl+S"), saveBtn_, "Save run");
 
     onRunningChanged(false);
     onTimeChanged(facade_.time());
@@ -116,6 +139,11 @@ void MainWindow::buildUi() {
     controls->addWidget(resumeBtn_);
     controls->addWidget(stepBtn_);
     controls->addWidget(resetBtn_);
+    controls->addSpacing(8);
+    controls->addWidget(new QLabel("Speed:"));
+    speedBox_ = new QComboBox();
+    speedBox_->addItems({"1x", "2x", "5x", "10x"});
+    controls->addWidget(speedBox_);
     controls->addSpacing(16);
     controls->addWidget(reportBtn_);
     controls->addWidget(roadBtn_);
@@ -126,9 +154,11 @@ void MainWindow::buildUi() {
     controls->addWidget(new QLabel("Scenario:"));
     scenarioBox_ = new QComboBox();
     scenarioBox_->addItems(facade_.scenarioNames());
-    scenarioBtn_ = new QPushButton("Run scenario");
+    scenarioBtn_ = new QPushButton("Run instantly");
+    playBtn_ = new QPushButton("Play scenario");
     controls->addWidget(scenarioBox_);
     controls->addWidget(scenarioBtn_);
+    controls->addWidget(playBtn_);
     root->addLayout(controls);
 
     mapView_ = new MapView(facade_);
@@ -308,6 +338,7 @@ void MainWindow::onReset() {
 
 void MainWindow::runSelectedScenario() {
     const QString name = scenarioBox_->currentText();
+    if (!confirmDiscard()) return;
     if (facade_.runScenario(name))
         statusBar()->showMessage("Scenario finished: " + name, 5000);
 }
@@ -366,6 +397,27 @@ void MainWindow::onShowRuns() {
     RunsDialog dlg(facade_, this);
     dlg.exec();
 }
+bool MainWindow::confirmDiscard() {
+    if (facade_.incidents().empty()) return true;
+    const auto answer = QMessageBox::question(
+        this, "Discard current run?",
+        "The current run is lost unless you used Save run. Discard it and continue?",
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    return answer == QMessageBox::Yes;
+}
+
+void MainWindow::onResetClicked() {
+    if (!confirmDiscard()) return;
+    facade_.reset();
+}
+
+void MainWindow::onPlayScenario() {
+    if (!confirmDiscard()) return;
+    const QString name = scenarioBox_->currentText();
+    if (facade_.playScenario(name))
+        statusBar()->showMessage("Scenario loaded: " + name + ". Press Start (F5) or Step (F7).", 8000);
+}
+
 void MainWindow::onShowStats() {
     int unmetNow = 0;
     for (const auto& i : facade_.incidents())

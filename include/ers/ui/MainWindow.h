@@ -35,10 +35,13 @@ private slots:
     void onShowStats();
     void onSaveRun();
     void onShowRuns();
+    void onResetClicked();
+    void onPlayScenario();
 
 private:
     void buildUi();
     int selectedIncidentId() const;
+    bool confirmDiscard();
 
     ApplicationFacade facade_;
     MapView* mapView_ = nullptr;
@@ -58,9 +61,11 @@ private:
     QPushButton* statsBtn_ = nullptr;
     QPushButton* saveBtn_ = nullptr;
     QPushButton* runsBtn_ = nullptr;
+    QPushButton* playBtn_ = nullptr;
     QPushButton* resolveBtn_ = nullptr;
     QPushButton* priorityBtn_ = nullptr;
     QComboBox* scenarioBox_ = nullptr;
+    QComboBox* speedBox_ = nullptr;
 };
 
 } // namespace ers
