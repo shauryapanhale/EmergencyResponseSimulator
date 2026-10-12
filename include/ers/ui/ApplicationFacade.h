@@ -49,6 +49,7 @@ struct StatsView {
     double maxResponse = 0.0;
     double avgWaiting = 0.0;
     double avgResolution = 0.0;
+    int resolvedWithUnmet = 0;
 };
 
 // Controller layer between the Qt GUI and the C++ engine (SRS 6.2). Single-threaded:

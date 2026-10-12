@@ -231,6 +231,7 @@ StatsView ApplicationFacade::stats() const {
     v.maxResponse = s.maxResponse;
     v.avgWaiting = s.avgWaiting;
     v.avgResolution = s.avgResolution;
+    v.resolvedWithUnmet = s.resolvedWithUnmet;
     return v;
 }
 

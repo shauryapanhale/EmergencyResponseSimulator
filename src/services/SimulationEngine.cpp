@@ -247,7 +247,7 @@ void SimulationEngine::resolveIncident(EmergencyId id) {
             throw InvalidTransitionException("Assigned vehicles are still en route");
 
     e.markResolved();
-    stats_.incidentResolved(id, now_);
+    stats_.incidentResolved(id, now_, unmet_.count(id) > 0);
     log_.append(now_, "Incident", id, "Resolved");
 
     for (Response& r : responses_) {

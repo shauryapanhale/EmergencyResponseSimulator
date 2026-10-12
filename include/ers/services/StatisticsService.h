@@ -11,6 +11,7 @@ namespace ers {
 struct StatsSnapshot {
     int created = 0;
     int resolved = 0;
+    int resolvedWithUnmet = 0;  // resolved while a required resource type was still unmet
     int active = 0;      // dispatched but not resolved
     int pending = 0;     // never dispatched, not resolved
     int unserved = 0;    // incidents still waiting for any resource (same as pending)
@@ -26,7 +27,7 @@ public:
     void incidentCreated(EmergencyId id, double simTime);
     void incidentDispatched(EmergencyId id, double simTime);  // only the first dispatch counts
     void vehicleArrived(EmergencyId id, double dispatchedAt, double arrivedAt);
-    void incidentResolved(EmergencyId id, double simTime);
+    void incidentResolved(EmergencyId id, double simTime, bool hadUnmetResources = false);
     void trackVehicle(VehicleId id, bool busy, double dtMinutes);
     void reset();
     StatsSnapshot snapshot() const;
@@ -36,6 +37,7 @@ private:
         double createdAt;
         std::optional<double> firstDispatchAt;
         std::optional<double> resolvedAt;
+        bool resolvedWithUnmet = false;
     };
     IncidentRecord& find(EmergencyId id);
 

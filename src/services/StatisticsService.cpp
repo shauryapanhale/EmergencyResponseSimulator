@@ -27,11 +27,12 @@ void StatisticsService::vehicleArrived(EmergencyId id, double dispatchedAt, doub
     responseTimes_.push_back(arrivedAt - dispatchedAt);
 }
 
-void StatisticsService::incidentResolved(EmergencyId id, double simTime) {
+void StatisticsService::incidentResolved(EmergencyId id, double simTime, bool hadUnmetResources) {
     IncidentRecord& r = find(id);
     if (r.resolvedAt) throw ValidationException("Statistics: incident already resolved");
     if (simTime < r.createdAt) throw ValidationException("Statistics: resolution precedes creation");
     r.resolvedAt = simTime;
+    r.resolvedWithUnmet = hadUnmetResources;
 }
 
 void StatisticsService::trackVehicle(VehicleId id, bool busy, double dtMinutes) {
@@ -55,7 +56,12 @@ StatsSnapshot StatisticsService::snapshot() const {
     for (const auto& kv : incidents_) {
         const IncidentRecord& r = kv.second;
         if (r.firstDispatchAt) { waitSum += *r.firstDispatchAt - r.createdAt; ++waitN; }
-        if (r.resolvedAt) { ++s.resolved; resSum += *r.resolvedAt - r.createdAt; ++resN; }
+        if (r.resolvedAt) {
+            ++s.resolved;
+            if (r.resolvedWithUnmet) ++s.resolvedWithUnmet;
+            resSum += *r.resolvedAt - r.createdAt;
+            ++resN;
+        }
         else if (r.firstDispatchAt) ++s.active;
         else ++s.pending;
     }

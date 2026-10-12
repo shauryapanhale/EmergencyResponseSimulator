@@ -125,6 +125,7 @@ StatsDialog::StatsDialog(const StatsView& s, int unmetNow, QWidget* parent) : QD
     form->addRow("Active:", new QLabel(QString::number(s.active)));
     form->addRow("Pending:", new QLabel(QString::number(s.pending)));
     form->addRow("Open with unmet resources now:", new QLabel(QString::number(unmetNow)));
+    form->addRow("Resolved with unmet resources:", new QLabel(QString::number(s.resolvedWithUnmet)));
     form->addRow("Responses (arrivals):", new QLabel(QString::number(s.responseCount)));
     form->addRow("Average response:", new QLabel(num(s.avgResponse)));
     form->addRow("Minimum response:", new QLabel(num(s.minResponse)));
@@ -135,7 +136,7 @@ StatsDialog::StatsDialog(const StatsView& s, int unmetNow, QWidget* parent) : QD
 
     auto* note = new QLabel(
         "Note: an incident resolved while a resource type was still unmet counts as resolved. "
-        "A dedicated counter is planned.\nSimulated estimates only.");
+        "The row Resolved with unmet resources counts those.\nSimulated estimates only.");
     note->setWordWrap(true);
     layout->addWidget(note);
     layout->addWidget(addButtons(this, QDialogButtonBox::Close));
