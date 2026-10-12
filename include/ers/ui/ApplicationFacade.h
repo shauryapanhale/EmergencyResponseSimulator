@@ -80,7 +80,7 @@ public:
     std::vector<RunSummary> savedRuns();              // all runs stored in the database file
     QStringList savedRunLog(long long runId);         // formatted event log of one saved run
     void setDatabasePath(const QString& path);
-    QString databasePath() const { return dbPath_; }
+    QString databasePath() const { return resolvedDatabasePath(); }
     QString currentScenarioName() const { return scenarioName_; }
         // Step-by-step playback: loads the scenario at minute 0; Start or stepOnce() then advance
     // it, applying events as simulation time reaches them. Emits scenarioFinished at the end.
@@ -131,7 +131,8 @@ private:
     QTimer timer_;
     bool running_ = false;
     std::size_t logIndex_ = 0;
-    QString dbPath_ = "ers_gui.db";
+    QString dbPath_;  // empty = per-user data folder
+    QString resolvedDatabasePath() const;
     QString scenarioName_ = "manual";
 };
 

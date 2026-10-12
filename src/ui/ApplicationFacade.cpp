@@ -1,5 +1,7 @@
 #include "ers/ui/ApplicationFacade.h"
 #include <exception>
+#include <QDir>
+#include <QStandardPaths>
 #include "ers/common/Exceptions.h"
 #include "ers/common/Strings.h"
 #include "ers/repositories/Database.h"
@@ -272,10 +274,18 @@ QString ApplicationFacade::disclaimer() {
 
 void ApplicationFacade::setDatabasePath(const QString& path) { dbPath_ = path; }
 
+QString ApplicationFacade::resolvedDatabasePath() const {
+    if (!dbPath_.isEmpty()) return dbPath_;
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (dir.isEmpty()) return QStringLiteral("ers_gui.db");
+    QDir().mkpath(dir);
+    return QDir(dir).filePath(QStringLiteral("ers_gui.db"));
+}
+
 long long ApplicationFacade::saveCurrentRun() {
     long long runId = -1;
     guarded([&] {
-        Database db(dbPath_.toStdString());
+        Database db(resolvedDatabasePath().toStdString());
         seedSampleCity(db);  // creates the schema and the city/fleet rows the run refers to
         RunRepository repo(db);
         runId = repo.saveRun(*sim_, scenarioName_.toStdString());
@@ -286,7 +296,7 @@ long long ApplicationFacade::saveCurrentRun() {
 std::vector<RunSummary> ApplicationFacade::savedRuns() {
     std::vector<RunSummary> out;
     guarded([&] {
-        Database db(dbPath_.toStdString());
+        Database db(resolvedDatabasePath().toStdString());
         seedSampleCity(db);
         RunRepository repo(db);
         for (const RunInfo& r : repo.listRuns()) {
@@ -304,7 +314,7 @@ std::vector<RunSummary> ApplicationFacade::savedRuns() {
 QStringList ApplicationFacade::savedRunLog(long long runId) {
     QStringList lines;
     guarded([&] {
-        Database db(dbPath_.toStdString());
+        Database db(resolvedDatabasePath().toStdString());
         seedSampleCity(db);
         RunRepository repo(db);
         for (const auto& e : repo.loadLog(runId)) lines << q(EventLog::format(e));

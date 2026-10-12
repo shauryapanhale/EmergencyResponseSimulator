@@ -1,4 +1,8 @@
 #include <QSignalSpy>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtTest>
 #include "ers/ui/ApplicationFacade.h"
@@ -9,6 +13,7 @@ private slots:
     void saveAndListRuns();
     void playScenarioStepByStep();
     void invalidDatabasePath();
+    void defaultPathIsPerUser();
 };
 
 void FacadeRunsTest::saveAndListRuns() {
@@ -80,6 +85,19 @@ void FacadeRunsTest::invalidDatabasePath() {
 
     QCOMPARE(facade.time(), before);
     QCOMPARE(static_cast<int>(facade.incidents().size()), 1);
+}
+void FacadeRunsTest::defaultPathIsPerUser() {
+    QStandardPaths::setTestModeEnabled(true);
+    ers::ApplicationFacade facade;
+    const QString path = facade.databasePath();
+    QVERIFY(QFileInfo(path).isAbsolute());
+    QVERIFY(path.endsWith(QStringLiteral("ers_gui.db")));
+    QVERIFY(QFileInfo(path).dir().exists());
+
+    QFile::remove(path);
+    QVERIFY(facade.saveCurrentRun() > 0);
+    QCOMPARE(static_cast<int>(facade.savedRuns().size()), 1);
+    QFile::remove(path);
 }
 QTEST_GUILESS_MAIN(FacadeRunsTest)
 #include "FacadeRunsTest.moc"
