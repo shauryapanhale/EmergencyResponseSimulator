@@ -52,8 +52,8 @@ int main() {
         DispatchResult r = de.dispatch(*e, fleet, 0.0);
         CHECK(r.fullyAllocated() && r.records.size() == 1);
         CHECK(r.records[0].vehicleId() == 2);
-        CHECK(nearEq(r.records[0].etaMinutes(), 9.0));
-        CHECK(nearEq(r.records[0].etaMinutes(), r.records[0].route().totalMinutes()));
+        CHECK(nearEq(r.records[0].etaMinutes(), 9.0 * Vehicle::kReferenceSpeedKmph / 40.0));
+        CHECK(nearEq(r.records[0].etaMinutes(), r.records[0].route().totalMinutes() * fleet[1]->timeFactor()));
         CHECK(fleet[1]->status() == VehicleStatus::EnRoute);
         CHECK(fleet[0]->isAvailable());
         CHECK(e->status() == EmergencyStatus::Dispatched);
@@ -67,7 +67,7 @@ int main() {
         auto e = createEmergency(EmergencyType::Medical, 1, 2, Priority::High, 0.0, "");
         DispatchResult r = de.dispatch(*e, fleet, 0.0);
         CHECK(r.records.size() == 1 && r.records[0].vehicleId() == 1);
-        CHECK(nearEq(r.records[0].etaMinutes(), 10.0));
+        CHECK(nearEq(r.records[0].etaMinutes(), 10.0 * Vehicle::kReferenceSpeedKmph / 40.0));
     }
     // 3. Incompatible vehicle never chosen: only a fire truck for a medical incident
     {

@@ -54,13 +54,13 @@ void DispatchEngine::allocate(Emergency& incident, std::vector<std::unique_ptr<V
 
         auto best = std::min_element(candidates.begin(), candidates.end(),
             [](const Candidate& a, const Candidate& b) {
-                if (a.route.totalMinutes() != b.route.totalMinutes())
-                    return a.route.totalMinutes() < b.route.totalMinutes();
+                if (a.route.totalMinutes() * a.vehicle->timeFactor() != b.route.totalMinutes() * b.vehicle->timeFactor())
+                    return a.route.totalMinutes() * a.vehicle->timeFactor() < b.route.totalMinutes() * b.vehicle->timeFactor();
                 return a.vehicle->id() < b.vehicle->id();
             });
 
         Vehicle& chosen = *best->vehicle;
-        double eta = best->route.totalMinutes();
+        double eta = best->route.totalMinutes() * best->vehicle->timeFactor();
         chosen.assignIncident(incident.id());  // reserves the vehicle
 
         std::ostringstream reason;

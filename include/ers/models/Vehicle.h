@@ -27,6 +27,8 @@ public:
     NodeId homeNode() const { return homeNode_; }
     NodeId currentNode() const { return currentNode_; }
     double speedKmph() const { return speedKmph_; }
+    static constexpr double kReferenceSpeedKmph = 30.0;  // speed at which road minutes are defined
+    double timeFactor() const { return kReferenceSpeedKmph / speedKmph_; }
     VehicleStatus status() const { return status_; }
     bool isAvailable() const { return status_ == VehicleStatus::Available; }
     std::optional<EmergencyId> assignedIncident() const { return assigned_; }

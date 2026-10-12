@@ -50,8 +50,10 @@ static Fleet fullFleet() {
     return f;
 }
 
+// Speed-aware timing: real minutes = road minutes * 30 / vehicle speed.
+// Ambulance 40 km/h -> factor 0.75, fire truck 35 km/h -> 0.857.
 int main() {
-    // A. Full lifecycle of one incident
+    // A. Full lifecycle of one incident (route 0-1-2 = 10 road min = 7.5 min at 40 km/h)
     {
         CityMap city = makeCity();
         SimulationEngine sim(city, oneAmbulance());
@@ -62,28 +64,28 @@ int main() {
 
         sim.runTicks(2);
         Point p = sim.vehiclePosition(1);
-        CHECK(nearEq(p.x, 5.0) && nearEq(p.y, 0.0));
+        CHECK(nearEq(p.x, 20.0 / 3.0) && nearEq(p.y, 0.0));  // 2 min = 2.667 road min of the 4-min road
 
-        sim.runTicks(7);  // t = 9
+        sim.runTicks(5);  // t = 7
         CHECK(sim.incident(id).status() == EmergencyStatus::Dispatched);
-        sim.step();       // t = 10
-        CHECK(nearEq(sim.time(), 10.0));
+        sim.step();       // t = 8
+        CHECK(nearEq(sim.time(), 8.0));
         CHECK(sim.incident(id).status() == EmergencyStatus::OnScene);
         auto recs = sim.dispatchRecords();
-        CHECK(recs.size() == 1 && recs[0].hasArrived() && nearEq(recs[0].responseTime(), 10.0));
-        CHECK(sim.stats().responseCount == 1 && nearEq(sim.stats().avgResponse, 10.0));
+        CHECK(recs.size() == 1 && recs[0].hasArrived() && nearEq(recs[0].responseTime(), 7.5));
+        CHECK(sim.stats().responseCount == 1 && nearEq(sim.stats().avgResponse, 7.5));
 
         sim.resolveIncident(id);
         CHECK(sim.incident(id).status() == EmergencyStatus::Resolved);
         CHECK(sim.vehicle(1).status() == VehicleStatus::Returning);
-        sim.runTicks(9);
+        sim.runTicks(7);  // t = 15, the return trip takes 7.5 min
         CHECK(sim.vehicle(1).status() == VehicleStatus::Returning);
-        sim.step();       // t = 20
+        sim.step();       // t = 16
         CHECK(sim.vehicle(1).isAvailable() && sim.vehicle(1).currentNode() == 0);
 
         StatsSnapshot s = sim.stats();
         CHECK(s.created == 1 && s.resolved == 1 && s.active == 0 && s.pending == 0);
-        CHECK(nearEq(s.utilization.at(1), 0.5));
+        CHECK(nearEq(s.utilization.at(1), 0.5));  // 8 busy ticks of 16
         CHECK(!sim.log().filterByType("Arrived").empty());
     }
     // B. Pending incident is served once the vehicle returns (auto-resolve 2 min)
@@ -96,20 +98,20 @@ int main() {
         CHECK(sim.pendingIncidents() == std::vector<EmergencyId>{b});
         CHECK(sim.explanationFor(b).find("unavailable") != std::string::npos);
 
-        sim.runTicks(4);
+        sim.runTicks(4);  // t = 4, arrived at t = 3 (4 road min * 0.75)
         CHECK(sim.incident(a).status() == EmergencyStatus::OnScene);
-        sim.runTicks(2);
+        sim.runTicks(2);  // t = 6, auto-resolved at t = 5
         CHECK(sim.incident(a).status() == EmergencyStatus::Resolved);
-        sim.runTicks(3);  // t = 9
+        sim.runTicks(1);  // t = 7, the 3-minute return ends at t = 8
         CHECK(sim.incident(b).status() == EmergencyStatus::Pending);
-        sim.step();       // t = 10
+        sim.step();       // t = 8
         CHECK(sim.incident(b).status() == EmergencyStatus::Dispatched);
-        CHECK(nearEq(sim.dispatchRecords().back().dispatchedAt(), 10.0));
+        CHECK(nearEq(sim.dispatchRecords().back().dispatchedAt(), 8.0));
 
         StatsSnapshot s = sim.stats();
         CHECK(s.created == 2 && s.resolved == 1 && s.active == 1 && s.pending == 0);
-        CHECK(nearEq(s.avgWaiting, 5.0) && nearEq(s.avgResolution, 6.0));
-        CHECK(s.responseCount == 1 && nearEq(s.avgResponse, 4.0));
+        CHECK(nearEq(s.avgWaiting, 4.0) && nearEq(s.avgResolution, 5.0));
+        CHECK(s.responseCount == 1 && nearEq(s.avgResponse, 3.0));
     }
     // C. Multi-vehicle critical fire
     {
@@ -126,7 +128,9 @@ int main() {
         CHECK(sim.vehicle(2).status() == VehicleStatus::Returning);
         StatsSnapshot s = sim.stats();
         CHECK(s.responseCount == 2);
-        CHECK(nearEq(s.avgResponse, 6.0) && nearEq(s.minResponse, 5.0) && nearEq(s.maxResponse, 7.0));
+        const double truck = 5.0 * 30.0 / 35.0;  // fire truck 3: 5 road min at 35 km/h
+        const double amb = 7.0 * 30.0 / 40.0;    // ambulance 2: 7 road min at 40 km/h
+        CHECK(nearEq(s.avgResponse, (truck + amb) / 2.0) && nearEq(s.minResponse, truck) && nearEq(s.maxResponse, amb));
     }
     // D. Priority change while queued
     {
@@ -170,17 +174,17 @@ int main() {
         sim.reportIncident(EmergencyType::Medical, 2, Priority::High, "");
         CHECK(sim.dispatchRecords()[0].vehicleId() == 1);
     }
-    // G. Smaller tick still arrives exactly at the ETA
+    // G. Smaller tick still arrives exactly at the ETA (7.5 min)
     {
         CityMap city = makeCity();
         SimulationConfig cfg; cfg.tickMinutes = 0.5;
         SimulationEngine sim(city, oneAmbulance(), cfg);
         EmergencyId id = sim.reportIncident(EmergencyType::Medical, 2, Priority::High, "");
-        sim.runTicks(19);
+        sim.runTicks(14);  // t = 7.0
         CHECK(sim.incident(id).status() == EmergencyStatus::Dispatched);
-        sim.step();
-        CHECK(sim.incident(id).status() == EmergencyStatus::OnScene && nearEq(sim.time(), 10.0));
-        CHECK(nearEq(sim.dispatchRecords()[0].responseTime(), 10.0));
+        sim.step();        // t = 7.5
+        CHECK(sim.incident(id).status() == EmergencyStatus::OnScene && nearEq(sim.time(), 7.5));
+        CHECK(nearEq(sim.dispatchRecords()[0].responseTime(), 7.5));
     }
     // H. Log export (file handling)
     {

@@ -195,7 +195,8 @@ void SimulationEngine::registerDispatch(Emergency& e, const DispatchResult& resu
 
 double SimulationEngine::moveAlong(Response& r, double dt, bool& reached) {
     Vehicle& v = vehicleRef(r.record.vehicleId());
-    double remaining = dt;
+    const double factor = v.timeFactor();
+    double remaining = dt / factor;  // progress is kept in road minutes
     while (r.seg < r.roads.size()) {
         const Road& road = city_.road(r.roads[r.seg]);
         double need = road.currentMinutes() - r.progress;
@@ -211,7 +212,7 @@ double SimulationEngine::moveAlong(Response& r, double dt, bool& reached) {
         }
     }
     reached = r.seg >= r.roads.size();
-    return dt - remaining;
+    return (dt / factor - remaining) * factor;
 }
 
 void SimulationEngine::handleArrival(Response& r, double time) {
@@ -262,7 +263,7 @@ void SimulationEngine::resolveIncident(EmergencyId id) {
             r.seg = 0;
             r.progress = 0.0;
             r.phase = Phase::Returning;
-            log_.append(now_, "Vehicle", v.id(), "Returning", "ETA home " + fmt1(home.totalMinutes()) + " min");
+            log_.append(now_, "Vehicle", v.id(), "Returning", "ETA home " + fmt1(home.totalMinutes() * v.timeFactor()) + " min");
         } catch (const NoRouteException&) {
             log_.append(now_, "Vehicle", v.id(), "NoRouteHome", "returned to base instantly");
             v.markBackAtBase();
