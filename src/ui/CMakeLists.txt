@@ -23,9 +23,13 @@ add_executable(ApplicationFacadeTest tests/ApplicationFacadeTest.cpp)
 target_link_libraries(ApplicationFacadeTest PRIVATE ers_qt Qt6::Test)
 add_test(NAME ApplicationFacadeTest COMMAND ApplicationFacadeTest)
 
+add_executable(FacadeRunsTest tests/FacadeRunsTest.cpp)
+target_link_libraries(FacadeRunsTest PRIVATE ers_qt Qt6::Test)
+add_test(NAME FacadeRunsTest COMMAND FacadeRunsTest)
+
 # Let ctest find the Qt DLLs without editing PATH by hand
 get_filename_component(ERS_QT_BIN_DIR "${Qt6_DIR}/../../../bin" ABSOLUTE)
 if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.22)
-    set_tests_properties(ApplicationFacadeTest PROPERTIES
+    set_tests_properties(ApplicationFacadeTest FacadeRunsTest PROPERTIES
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${ERS_QT_BIN_DIR}")
 endif()

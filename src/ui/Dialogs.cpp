@@ -6,7 +6,10 @@
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QLabel>
+#include <QHeaderView>
 #include <QLineEdit>
+#include <QPlainTextEdit>
+#include <QTableWidget>
 #include <QVBoxLayout>
 
 namespace ers {
@@ -140,6 +143,52 @@ StatsDialog::StatsDialog(const StatsView& s, int unmetNow, QWidget* parent) : QD
     note->setWordWrap(true);
     layout->addWidget(note);
     layout->addWidget(addButtons(this, QDialogButtonBox::Close));
+}
+
+RunsDialog::RunsDialog(ApplicationFacade& facade, QWidget* parent) : QDialog(parent), facade_(facade) {
+    setWindowTitle("Saved runs");
+    resize(900, 560);
+    auto* layout = new QVBoxLayout(this);
+    layout->addWidget(new QLabel(QString("Database file: %1").arg(facade_.databasePath())));
+
+    table_ = new QTableWidget(this);
+    table_->setColumnCount(4);
+    table_->setHorizontalHeaderLabels({"Run", "Scenario", "End time (min)", "Summary"});
+    table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table_->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table_->setSelectionMode(QAbstractItemView::SingleSelection);
+    table_->verticalHeader()->setVisible(false);
+    table_->horizontalHeader()->setStretchLastSection(true);
+    layout->addWidget(table_, 2);
+
+    layout->addWidget(new QLabel("Event log of the selected run"));
+    log_ = new QPlainTextEdit(this);
+    log_->setReadOnly(true);
+    layout->addWidget(log_, 3);
+    layout->addWidget(addButtons(this, QDialogButtonBox::Close));
+
+    runs_ = facade_.savedRuns();
+    table_->setRowCount(static_cast<int>(runs_.size()));
+    for (int row = 0; row < static_cast<int>(runs_.size()); ++row) {
+        const RunSummary& r = runs_[static_cast<std::size_t>(row)];
+        QString summary = r.summary;
+        summary.replace(';', ", ");
+        const QStringList cells = {QString::number(r.runId), r.scenario,
+                                   QString::number(r.endTime, 'f', 1), summary};
+        for (int c = 0; c < cells.size(); ++c)
+            table_->setItem(row, c, new QTableWidgetItem(cells[c]));
+    }
+    log_->setPlainText(runs_.empty() ? "No saved runs yet. Use Save run first."
+                                     : "Select a run to see its event log.");
+
+    connect(table_, &QTableWidget::itemSelectionChanged, this, [this] {
+        const auto items = table_->selectedItems();
+        if (items.isEmpty()) return;
+        const int row = items.first()->row();
+        if (row < 0 || row >= static_cast<int>(runs_.size())) return;
+        const long long id = runs_[static_cast<std::size_t>(row)].runId;
+        log_->setPlainText(facade_.savedRunLog(id).join("\n"));
+    });
 }
 
 } // namespace ers

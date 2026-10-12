@@ -38,6 +38,13 @@ struct VehicleView {
     int assignedIncident = -1;  // -1 when none
 };
 
+// One saved run, as listed by the runs dialog.
+struct RunSummary {
+    long long runId = 0;
+    QString scenario;
+    double endTime = 0.0;
+    QString summary;
+};
 struct StatsView {
     int created = 0;
     int resolved = 0;
@@ -67,7 +74,14 @@ public:
     bool setTraffic(int roadId, double factor);
     bool setBlocked(int roadId, bool blocked);
     bool runScenario(const QString& name);   // resets, then runs the scenario to its end
-    void setTickIntervalMs(int ms);
+    // Persistence (FR-21). All three return -1 / empty and emit errorOccurred on failure.
+    long long saveCurrentRun();                       // saves the current run, returns its run id
+    std::vector<RunSummary> savedRuns();              // all runs stored in the database file
+    QStringList savedRunLog(long long runId);         // formatted event log of one saved run
+    void setDatabasePath(const QString& path);
+    QString databasePath() const { return dbPath_; }
+    QString currentScenarioName() const { return scenarioName_; }
+        void setTickIntervalMs(int ms);
     void setAutoResolveMinutes(double minutes);  // < 0 = manual; resets the simulation
 
     // Read-only state
@@ -110,6 +124,8 @@ private:
     QTimer timer_;
     bool running_ = false;
     std::size_t logIndex_ = 0;
+    QString dbPath_ = "ers_gui.db";
+    QString scenarioName_ = "manual";
 };
 
 } // namespace ers

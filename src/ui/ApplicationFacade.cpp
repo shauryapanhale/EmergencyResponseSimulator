@@ -2,6 +2,8 @@
 #include <exception>
 #include "ers/common/Exceptions.h"
 #include "ers/common/Strings.h"
+#include "ers/repositories/Database.h"
+#include "ers/repositories/RunRepository.h"
 #include "ers/repositories/SampleCity.h"
 #include "ers/services/Scenario.h"
 
@@ -61,6 +63,7 @@ void ApplicationFacade::createSimulation() {
     sim_.reset();                 // engine first: it references city_.map
     city_ = buildSampleCity();    // fresh city: no leftover traffic or closures
     sim_ = std::make_unique<SimulationEngine>(city_.map, buildSampleFleet(), cfg_);
+    scenarioName_ = "manual";
     logIndex_ = 0;
     running_ = false;
 }
@@ -111,6 +114,7 @@ bool ApplicationFacade::runScenario(const QString& name) {
         const Scenario& sc = findScenario(name.toStdString());
         createSimulation();
         ers::runScenario(*sim_, sc);
+        scenarioName_ = name;
     });
     if (!ok) return false;
     if (wasRunning) emit runningChanged(false);
@@ -253,6 +257,48 @@ QStringList ApplicationFacade::scenarioNames() const {
 
 QString ApplicationFacade::disclaimer() {
     return "Educational simulation only - not for real emergency use.";
+}
+
+void ApplicationFacade::setDatabasePath(const QString& path) { dbPath_ = path; }
+
+long long ApplicationFacade::saveCurrentRun() {
+    long long runId = -1;
+    guarded([&] {
+        Database db(dbPath_.toStdString());
+        seedSampleCity(db);  // creates the schema and the city/fleet rows the run refers to
+        RunRepository repo(db);
+        runId = repo.saveRun(*sim_, scenarioName_.toStdString());
+    });
+    return runId;
+}
+
+std::vector<RunSummary> ApplicationFacade::savedRuns() {
+    std::vector<RunSummary> out;
+    guarded([&] {
+        Database db(dbPath_.toStdString());
+        seedSampleCity(db);
+        RunRepository repo(db);
+        for (const RunInfo& r : repo.listRuns()) {
+            RunSummary s;
+            s.runId = r.runId;
+            s.scenario = q(r.scenarioName);
+            s.endTime = r.endTime;
+            s.summary = q(r.summary);
+            out.push_back(s);
+        }
+    });
+    return out;
+}
+
+QStringList ApplicationFacade::savedRunLog(long long runId) {
+    QStringList lines;
+    guarded([&] {
+        Database db(dbPath_.toStdString());
+        seedSampleCity(db);
+        RunRepository repo(db);
+        for (const auto& e : repo.loadLog(runId)) lines << q(EventLog::format(e));
+    });
+    return lines;
 }
 
 } // namespace ers

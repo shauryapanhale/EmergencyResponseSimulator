@@ -80,6 +80,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(reportBtn_, &QPushButton::clicked, this, &MainWindow::onReportIncident);
     connect(roadBtn_, &QPushButton::clicked, this, &MainWindow::onRoadDialog);
     connect(statsBtn_, &QPushButton::clicked, this, &MainWindow::onShowStats);
+    connect(saveBtn_, &QPushButton::clicked, this, &MainWindow::onSaveRun);
+    connect(runsBtn_, &QPushButton::clicked, this, &MainWindow::onShowRuns);
     connect(resolveBtn_, &QPushButton::clicked, this, &MainWindow::onResolve);
     connect(priorityBtn_, &QPushButton::clicked, this, &MainWindow::onChangePriority);
     connect(incidentTable_, &QTableWidget::itemSelectionChanged, this, &MainWindow::updateDetails);
@@ -107,6 +109,8 @@ void MainWindow::buildUi() {
     reportBtn_ = new QPushButton("Report incident...");
     roadBtn_ = new QPushButton("Traffic / roads...");
     statsBtn_ = new QPushButton("Statistics...");
+    saveBtn_ = new QPushButton("Save run");
+    runsBtn_ = new QPushButton("Saved runs...");
     controls->addWidget(startBtn_);
     controls->addWidget(pauseBtn_);
     controls->addWidget(resumeBtn_);
@@ -116,6 +120,8 @@ void MainWindow::buildUi() {
     controls->addWidget(reportBtn_);
     controls->addWidget(roadBtn_);
     controls->addWidget(statsBtn_);
+    controls->addWidget(saveBtn_);
+    controls->addWidget(runsBtn_);
     controls->addStretch();
     controls->addWidget(new QLabel("Scenario:"));
     scenarioBox_ = new QComboBox();
@@ -347,6 +353,19 @@ void MainWindow::onChangePriority() {
         statusBar()->showMessage(QString("Incident %1 priority set to %2").arg(id).arg(choice), 5000);
 }
 
+void MainWindow::onSaveRun() {
+    const long long id = facade_.saveCurrentRun();
+    if (id >= 0)
+        statusBar()->showMessage(QString("Run saved as #%1 (scenario: %2) in %3")
+                                     .arg(id)
+                                     .arg(facade_.currentScenarioName(), facade_.databasePath()),
+                                 8000);
+}
+
+void MainWindow::onShowRuns() {
+    RunsDialog dlg(facade_, this);
+    dlg.exec();
+}
 void MainWindow::onShowStats() {
     int unmetNow = 0;
     for (const auto& i : facade_.incidents())

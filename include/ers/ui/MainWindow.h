@@ -33,6 +33,8 @@ private slots:
     void onResolve();
     void onChangePriority();
     void onShowStats();
+    void onSaveRun();
+    void onShowRuns();
 
 private:
     void buildUi();
@@ -54,6 +56,8 @@ private:
     QPushButton* reportBtn_ = nullptr;
     QPushButton* roadBtn_ = nullptr;
     QPushButton* statsBtn_ = nullptr;
+    QPushButton* saveBtn_ = nullptr;
+    QPushButton* runsBtn_ = nullptr;
     QPushButton* resolveBtn_ = nullptr;
     QPushButton* priorityBtn_ = nullptr;
     QComboBox* scenarioBox_ = nullptr;

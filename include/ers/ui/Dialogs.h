@@ -9,6 +9,8 @@ class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
 class QLineEdit;
+class QPlainTextEdit;
+class QTableWidget;
 
 namespace ers {
 
@@ -44,6 +46,17 @@ private:
     QCheckBox* blockedBox_;
 };
 
+// Lists runs stored in the database file; selecting one shows its event log (read-only).
+class RunsDialog : public QDialog {
+public:
+    explicit RunsDialog(ApplicationFacade& facade, QWidget* parent = nullptr);
+
+private:
+    ApplicationFacade& facade_;
+    QTableWidget* table_;
+    QPlainTextEdit* log_;
+    std::vector<RunSummary> runs_;
+};
 class StatsDialog : public QDialog {
 public:
     StatsDialog(const StatsView& stats, int unmetNow, QWidget* parent = nullptr);
