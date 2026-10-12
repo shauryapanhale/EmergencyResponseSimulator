@@ -8,6 +8,7 @@ class FacadeRunsTest : public QObject {
 private slots:
     void saveAndListRuns();
     void playScenarioStepByStep();
+    void invalidDatabasePath();
 };
 
 void FacadeRunsTest::saveAndListRuns() {
@@ -62,5 +63,23 @@ void FacadeRunsTest::playScenarioStepByStep() {
     QCOMPARE(facade.time(), 0.0);
 }
 
+void FacadeRunsTest::invalidDatabasePath() {
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    ers::ApplicationFacade facade;
+    QSignalSpy errors(&facade, &ers::ApplicationFacade::errorOccurred);
+    facade.setDatabasePath(dir.filePath(QStringLiteral("no_such_dir/runs.db")));
+
+    QVERIFY(facade.reportIncident(ers::EmergencyType::Medical, 7, ers::Priority::High, QStringLiteral("test")) > 0);
+    const double before = facade.time();
+
+    QCOMPARE(facade.saveCurrentRun(), static_cast<long long>(-1));
+    QVERIFY(errors.count() >= 1);
+    QVERIFY(facade.savedRuns().empty());
+    QVERIFY(facade.savedRunLog(1).isEmpty());
+
+    QCOMPARE(facade.time(), before);
+    QCOMPARE(static_cast<int>(facade.incidents().size()), 1);
+}
 QTEST_GUILESS_MAIN(FacadeRunsTest)
 #include "FacadeRunsTest.moc"
