@@ -14,6 +14,7 @@ private slots:
     void playScenarioStepByStep();
     void invalidDatabasePath();
     void defaultPathIsPerUser();
+    void exportLogWritesFile();
 };
 
 void FacadeRunsTest::saveAndListRuns() {
@@ -98,6 +99,28 @@ void FacadeRunsTest::defaultPathIsPerUser() {
     QVERIFY(facade.saveCurrentRun() > 0);
     QCOMPARE(static_cast<int>(facade.savedRuns().size()), 1);
     QFile::remove(path);
+}
+void FacadeRunsTest::exportLogWritesFile() {
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    ers::ApplicationFacade facade;
+    QSignalSpy errors(&facade, &ers::ApplicationFacade::errorOccurred);
+
+    QVERIFY(facade.reportIncident(ers::EmergencyType::Medical, 7, ers::Priority::High, QStringLiteral("export test")) > 0);
+    const QString path = dir.filePath(QStringLiteral("event_log.txt"));
+    QVERIFY(facade.exportLog(path));
+    QCOMPARE(errors.count(), 0);
+
+    QFile file(path);
+    QVERIFY(file.exists());
+    QVERIFY(file.size() > 0);
+    QVERIFY(file.open(QIODevice::ReadOnly | QIODevice::Text));
+    QVERIFY(QString::fromUtf8(file.readAll()).contains(QStringLiteral("Incident")));
+    file.close();
+
+    QVERIFY(!facade.exportLog(dir.filePath(QStringLiteral("no_such_dir/log.txt"))));
+    QVERIFY(errors.count() >= 1);
+    QVERIFY(!facade.exportLog(QString()));
 }
 QTEST_GUILESS_MAIN(FacadeRunsTest)
 #include "FacadeRunsTest.moc"

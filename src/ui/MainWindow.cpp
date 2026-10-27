@@ -1,6 +1,8 @@
 #include "ers/ui/MainWindow.h"
 
 #include <QComboBox>
+#include <QDir>
+#include <QFileDialog>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QInputDialog>
@@ -11,6 +13,7 @@
 #include <QPushButton>
 #include <QShortcut>
 #include <QSplitter>
+#include <QStandardPaths>
 #include <QStatusBar>
 #include <QStringList>
 #include <QTableWidget>
@@ -85,6 +88,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(roadBtn_, &QPushButton::clicked, this, &MainWindow::onRoadDialog);
     connect(statsBtn_, &QPushButton::clicked, this, &MainWindow::onShowStats);
     connect(saveBtn_, &QPushButton::clicked, this, &MainWindow::onSaveRun);
+    connect(exportBtn_, &QPushButton::clicked, this, &MainWindow::onExportLog);
     connect(runsBtn_, &QPushButton::clicked, this, &MainWindow::onShowRuns);
     connect(resolveBtn_, &QPushButton::clicked, this, &MainWindow::onResolve);
     connect(priorityBtn_, &QPushButton::clicked, this, &MainWindow::onChangePriority);
@@ -133,6 +137,7 @@ void MainWindow::buildUi() {
     roadBtn_ = new QPushButton("Traffic / roads...");
     statsBtn_ = new QPushButton("Statistics...");
     saveBtn_ = new QPushButton("Save run");
+    exportBtn_ = new QPushButton("Export log...");
     runsBtn_ = new QPushButton("Saved runs...");
     controls->addWidget(startBtn_);
     controls->addWidget(pauseBtn_);
@@ -150,6 +155,7 @@ void MainWindow::buildUi() {
     controls->addWidget(statsBtn_);
     controls->addWidget(saveBtn_);
     controls->addWidget(runsBtn_);
+    controls->addWidget(exportBtn_);
     controls->addStretch();
     controls->addWidget(new QLabel("Scenario:"));
     scenarioBox_ = new QComboBox();
@@ -393,6 +399,15 @@ void MainWindow::onSaveRun() {
                                  8000);
 }
 
+void MainWindow::onExportLog() {
+    const QString suggested = QDir(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation))
+                                  .filePath("event_log.txt");
+    const QString path = QFileDialog::getSaveFileName(this, "Export event log", suggested,
+                                                      "Text files (*.txt);;All files (*)");
+    if (path.isEmpty()) return;  // cancelled
+    if (facade_.exportLog(path))
+        statusBar()->showMessage("Event log exported to " + path, 8000);
+}
 void MainWindow::onShowRuns() {
     RunsDialog dlg(facade_, this);
     dlg.exec();

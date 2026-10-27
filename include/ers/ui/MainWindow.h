@@ -34,6 +34,7 @@ private slots:
     void onChangePriority();
     void onShowStats();
     void onSaveRun();
+    void onExportLog();
     void onShowRuns();
     void onResetClicked();
     void onPlayScenario();
@@ -60,6 +61,7 @@ private:
     QPushButton* roadBtn_ = nullptr;
     QPushButton* statsBtn_ = nullptr;
     QPushButton* saveBtn_ = nullptr;
+    QPushButton* exportBtn_ = nullptr;
     QPushButton* runsBtn_ = nullptr;
     QPushButton* playBtn_ = nullptr;
     QPushButton* resolveBtn_ = nullptr;

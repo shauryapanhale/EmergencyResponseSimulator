@@ -322,6 +322,13 @@ QStringList ApplicationFacade::savedRunLog(long long runId) {
     return lines;
 }
 
+bool ApplicationFacade::exportLog(const QString& path) {
+    if (path.isEmpty()) {
+        emit errorOccurred("No file name given for the log export");
+        return false;
+    }
+    return guarded([&] { sim_->log().exportToFile(std::string(path.toLocal8Bit().constData())); });
+}
 bool ApplicationFacade::playScenario(const QString& name) {
     const bool wasRunning = running_;
     const bool ok = guarded([&] {

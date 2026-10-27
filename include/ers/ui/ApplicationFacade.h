@@ -80,6 +80,7 @@ public:
     std::vector<RunSummary> savedRuns();              // all runs stored in the database file
     QStringList savedRunLog(long long runId);         // formatted event log of one saved run
     void setDatabasePath(const QString& path);
+    bool exportLog(const QString& path);  // writes the event log as plain text (C++ file streams)
     QString databasePath() const { return resolvedDatabasePath(); }
     QString currentScenarioName() const { return scenarioName_; }
         // Step-by-step playback: loads the scenario at minute 0; Start or stepOnce() then advance
